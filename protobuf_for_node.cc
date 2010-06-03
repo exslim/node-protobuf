@@ -343,7 +343,7 @@ namespace protobuf_for_node {
 	type->ToProto(message, As<Object>(args[0]));
 	int length = message->ByteSize();
 	Buffer* buffer = Buffer::New(length);
-	message->SerializeToArray(buffer->data(), length);
+	message->SerializeWithCachedSizesToArray((google::protobuf::uint8*)buffer->data());
 	delete message;
 
 	return buffer->handle_;
