@@ -1,0 +1,80 @@
+Protobuf for Node adds idiomatic [http://code.google.com/p/protobuf
+protocol buffer] handling to [http://nodejs.org node.JS].
+
+How to use
+
+To read/write protocol buffers, protobuf for node needs the parsed
+representation of your protocol buffer schema (which is in protobuf
+format itself). The protobuf compiler spits out this format:
+
+$ vi feeds.proto
+package feeds;
+message Feed {
+  optional string title = 1;
+  message Entry {
+    optional string title = 1;
+  }
+  repeated Entry entry = 2;
+}
+:wq
+$ $PROTO/bin/protoc --descriptor_set_out=feeds.desc --include_imports feeds.proto
+
+Using this file (read into a Buffer) you can create a 'Schema' object:
+
+ var fs = require('fs');
+ var Schema = require('protobuf_for_node').Schema;
+ var schema = new Schema(fs.readFileSync('feeds.desc'));
+
+A Schema object maps fully qualified protocol buffer names to type
+objects that know how to marshal JS objects to and from Buffers:
+
+ var Feed = schema['feeds.Feed'];
+ var aFeed = Feed.parse(aBuffer);
+ var serialized = Feed.serialize(aFeed);
+
+When marshalling, the serializer accepts any JavaScript object (but
+only picks the properties defined in the schema):
+
+ var serialized = Feed.serialize({ title: 'Title', ignored: 42 });
+ var aFeed = Feed.parse(serialized);  => { title: 'Title' }
+
+Note how we're using uppercase for the type objects like for
+constructor functions. That's because they are: when parsing, objects
+are constructed using the respective constructor for the message
+type. This means that you are able to attach methods:
+
+  Feed.prototype.numEntries = function() {
+    return this.entry.length;
+  };
+  var aFeed = Feed.parse(Feed.serialize({ entry: [{}, {}] }));
+  aFeed.numEntries()  =>  2
+
+
+Speed
+
+Protobuf for Node relies on the protobuf C++ runtime but it does not
+require any generation, compilation or linkage of generated C++
+code. It works reflectively and is thus able to deal with arbitrary
+schemas. This means however, that it is not as fast as with generated
+code. Simple measurements show that it's about between 20% and 50%
+faster than V8's native JSON support.
+
+
+Building and running
+
+You need to have node.js (>= 0.1.97) and protobuf (>= 2.3.0)
+installed. To build protobuf for node, do:
+
+PROTOBUF=<protobuf prefix> /path/to/node/bin/node-waf configure clean build
+
+This will build build/default/protobuf_for_node.node which needs to be
+installed in your NODE_PATH. The protobuf library is linked
+dynamically and needs to be in your LD_LIBRARY_PATH when running.
+
+Limitations
+
+The add-on currently performs little error checking. It will probably
+crash the VM if you try to parse or serialize data incompatible with
+the schema or abuse it in other ways.
+
+The marshalling code does not preserve unknown fields nor extensions.
