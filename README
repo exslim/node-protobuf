@@ -1,5 +1,4 @@
-Protobuf for Node adds idiomatic [http://code.google.com/p/protobuf
-protocol buffer] handling to [http://nodejs.org node.JS].
+Protobuf for Node adds idiomatic protocol buffer handling to node.JS.
 
 How to use
 
