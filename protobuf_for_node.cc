@@ -168,7 +168,7 @@ namespace protobuf_for_node {
       }
 
 #define GET(TYPE)						\
-      (index >= 0 ?							\
+      (index >= 0 ?						\
        reflection->GetRepeated##TYPE(instance, field, index) :	\
        reflection->Get##TYPE(instance, field))
 
@@ -212,6 +212,8 @@ namespace protobuf_for_node {
 
 	Handle<Array> properties = Array::New(descriptor->field_count());
 	for (int i = 0; i < descriptor->field_count(); i++) {
+          HandleScope scope;
+
 	  const FieldDescriptor* field = descriptor->field(i);
 	  bool repeated = field->is_repeated();
 	  if (repeated && !reflection->FieldSize(instance, field)) continue;
@@ -260,6 +262,8 @@ namespace protobuf_for_node {
                           Handle<Value> value,
                           const Type* type,
                           bool repeated) {
+	HandleScope scope;
+
 	const Reflection* reflection = instance->GetReflection();
 	switch (field->cpp_type()) {
         case FieldDescriptor::CPPTYPE_MESSAGE:
