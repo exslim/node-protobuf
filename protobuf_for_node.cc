@@ -220,7 +220,7 @@ namespace protobuf_for_node {
 	  if (!repeated && !reflection->HasField(instance, field)) continue;
 
 	  const Type* child_type =
-            (field->type() == FieldDescriptor::TYPE_MESSAGE) ?
+            (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) ?
 	    schema_->GetType(field->message_type()) : NULL;
 
 	  Handle<Value> value;
@@ -318,7 +318,7 @@ namespace protobuf_for_node {
 
 	  const FieldDescriptor* field = descriptor_->field(i);
 	  const Type* child_type =
-            (field->type() == FieldDescriptor::TYPE_MESSAGE) ?
+            (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) ?
 	    schema_->GetType(field->message_type()) : NULL;
 	  if (field->is_repeated()) {
 	    if(!value->IsArray()) {
