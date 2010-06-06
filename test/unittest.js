@@ -13,3 +13,5 @@ assert.equal(T.serialize(message).inspect(), golden.inspect(), "roundtrip");
 
 message.ignored = 42;
 assert.equal(T.serialize(message).inspect(), golden.inspect(), "ignored field");
+
+puts("Success");

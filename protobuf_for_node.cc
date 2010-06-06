@@ -61,20 +61,13 @@ using v8::NamedPropertyGetter;
 using v8::Number;
 using v8::Object;
 using v8::ObjectTemplate;
+using v8::Persistent;
 using v8::Script;
 using v8::String;
 using v8::Value;
 using v8::V8;
 
 namespace protobuf_for_node {
-
-  static void SetMethod(Handle<FunctionTemplate> tmpl_,
-			const char* name,
-			InvocationCallback callback) {
-    tmpl_->PrototypeTemplate()->Set(
-        name, FunctionTemplate::New(callback)->GetFunction());
-  }
-
   template <typename T>
   static T* UnwrapThis(const Arguments& args) {
     return ObjectWrap::Unwrap<T>(args.This());
@@ -90,14 +83,17 @@ namespace protobuf_for_node {
     return Handle<T>::Cast(handle);
   }
 
+  Persistent<FunctionTemplate> SchemaTemplate;
+  Persistent<FunctionTemplate> TypeTemplate;
+  Persistent<FunctionTemplate> ParseTemplate;
+  Persistent<FunctionTemplate> SerializeTemplate;
+
   class Schema : public ObjectWrap {
   public:
-    Schema(Handle<Object> self, const DescriptorPool* pool,
-           Handle<Function> type_constructor)
+    Schema(Handle<Object> self, const DescriptorPool* pool)
         : pool_(pool) {
       factory_.SetDelegateToGeneratedFactory(true);
       self->SetInternalField(1, Array::New());
-      self->SetInternalField(2, type_constructor);
       Wrap(self);
     }
 
@@ -124,8 +120,7 @@ namespace protobuf_for_node {
       }
 
       Type(Schema* schema, const Descriptor* descriptor, Handle<Object> self)
-	: schema_(schema),
-	  descriptor_(descriptor) {
+	: schema_(schema), descriptor_(descriptor) {
 	// Generate functions for bulk conversion between a JS object
 	// and an array in descriptor order:
 	//   from = function(arr) { this.f0 = arr[0]; this.f1 = arr[1]; ... }
@@ -154,15 +149,15 @@ namespace protobuf_for_node {
 
         Handle<Function> constructor = As<Function>(
             Script::Compile(String::New(from.str().c_str()))->Run());
-        constructor->Set(String::New("parse"),
-                         FunctionTemplate::New(Schema::Type::Parse, self)->GetFunction());
-        constructor->Set(String::New("serialize"),
-                         FunctionTemplate::New(Schema::Type::Serialize, self)->GetFunction());
-
+        constructor->SetHiddenValue(String::New("type"), self);
+	
+	Handle<Function> bind =
+	  As<Function>(Script::Compile(String::New("(function(self) { var f = this; return function(arg) { return f.call(self, arg); }; })"))->Run());
+	Handle<Value> arg = self;
+	constructor->Set(String::New("parse"), bind->Call(ParseTemplate->GetFunction(), 1, &arg));
+	constructor->Set(String::New("serialize"), bind->Call(SerializeTemplate->GetFunction(), 1, &arg));
 	self->SetInternalField(2, constructor);
-
-	self->SetInternalField(
-            3, Script::Compile(String::New(to.str().c_str()))->Run());
+	self->SetInternalField(3, Script::Compile(String::New(to.str().c_str()))->Run());
 
 	Wrap(self);
       }
@@ -242,7 +237,7 @@ namespace protobuf_for_node {
       }
 
       static Handle<Value> Parse(const Arguments& args) {
-	Type* type = ObjectWrap::Unwrap<Type>(As<Object>(args.Data()));
+        Type* type = UnwrapThis<Type>(args);
 	Buffer* buf = ObjectWrap::Unwrap<Buffer>(args[0]->ToObject());
 
 	Message* message = type->NewMessage();
@@ -341,7 +336,7 @@ namespace protobuf_for_node {
 	  return v8::ThrowException(args[0]);
 	}
 
-	Type* type = ObjectWrap::Unwrap<Type>(As<Object>(args.Data()));
+        Type* type = UnwrapThis<Type>(args);
 
 	Message* message = type->NewMessage();
 	type->ToProto(message, As<Object>(args[0]));
@@ -367,10 +362,8 @@ namespace protobuf_for_node {
       Type* result = types_[descriptor];
       if (result) return result;
 
-      Handle<Function> type_constructor =
-          As<Function>(handle_->GetInternalField(2));
       result = types_[descriptor] =
-          new Type(this, descriptor, type_constructor->NewInstance());
+	new Type(this, descriptor, TypeTemplate->GetFunction()->NewInstance());
 
       // managed schema->[type] link
       Handle<Array> types = As<Array>(handle_->GetInternalField(1));
@@ -394,12 +387,9 @@ namespace protobuf_for_node {
     }
 
     static Handle<Value> NewSchema(const Arguments& args) {
-      Handle<Function> type_constructor = As<Function>(args.Data());
-
       if (!args.Length()) {
 	return (new Schema(args.This(),
-			   DescriptorPool::generated_pool(),
-                           type_constructor))->handle_;
+			   DescriptorPool::generated_pool()))->handle_;
       }
 
       Buffer* buf = ObjectWrap::Unwrap<Buffer>(args[0]->ToObject());
@@ -414,33 +404,37 @@ namespace protobuf_for_node {
 	pool->BuildFile(descriptors.file(i));
       }
 
-      return (new Schema(args.This(), pool, type_constructor))->handle_;
+      return (new Schema(args.This(), pool))->handle_;
     }
   };
 
-static Handle<Function> Init() {
-  Handle<FunctionTemplate> type_template = FunctionTemplate::New();
-  type_template->SetClassName(String::New("Type"));
-  // native self
-  // owning schema (so GC can manage our lifecyle)
-  // constructor
-  // toArray
-  type_template->InstanceTemplate()->SetInternalFieldCount(4);
+  static void Init() {
+    protobuf_for_node::TypeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New());
+    protobuf_for_node::TypeTemplate->SetClassName(String::New("Type"));
+    // native self
+    // owning schema (so GC can manage our lifecyle)
+    // constructor
+    // toArray
+    protobuf_for_node::TypeTemplate->InstanceTemplate()->SetInternalFieldCount(4);
 
-  Handle<FunctionTemplate> schema_template =
-      FunctionTemplate::New(Schema::NewSchema, type_template->GetFunction());
-  schema_template->SetClassName(String::New("Schema"));
-  // native self
-  // array of types (so GC can manage our lifecyle)
-  // type constructor
-  schema_template->InstanceTemplate()->SetInternalFieldCount(3);
-  schema_template->InstanceTemplate()->SetNamedPropertyHandler(Schema::GetType);
+    protobuf_for_node::SchemaTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::NewSchema));
+    protobuf_for_node::SchemaTemplate->SetClassName(String::New("Schema"));
+    // native self
+    // array of types (so GC can manage our lifecyle)
+    protobuf_for_node::SchemaTemplate->InstanceTemplate()->SetInternalFieldCount(2);
+    protobuf_for_node::SchemaTemplate->InstanceTemplate()->SetNamedPropertyHandler(Schema::GetType);
 
-  return schema_template->GetFunction();
-}
+    protobuf_for_node::ParseTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Parse));
+    protobuf_for_node::SerializeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Serialize));
+  }
 }  // namespace protobuf_for_node
+
+// function templates 
+extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
+  protobuf_for_node::Init();
+}
 
 extern "C" void init(Handle<Object> target) {
   target->Set(String::New("Schema"),
-	      protobuf_for_node::Init());
+	      protobuf_for_node::SchemaTemplate->GetFunction());
 }
