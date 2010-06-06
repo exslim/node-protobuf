@@ -12,6 +12,8 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include "protobuf_for_node.h"
+
 #include <map>
 #include <string>
 #include <vector>
@@ -21,11 +23,10 @@
 #include <google/protobuf/dynamic_message.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
+#include <google/protobuf/service.h>
 
 #include <node_buffer.h>
 #include <node_object_wrap.h>
-
-#include <v8.h>
 
 using google::protobuf::Descriptor;
 using google::protobuf::DescriptorPool;
@@ -33,7 +34,10 @@ using google::protobuf::DynamicMessageFactory;
 using google::protobuf::FieldDescriptor;
 using google::protobuf::FileDescriptorSet;
 using google::protobuf::Message;
+using google::protobuf::MethodDescriptor;
 using google::protobuf::Reflection;
+using google::protobuf::Service;
+using google::protobuf::ServiceDescriptor;
 
 using node::ObjectWrap;
 using node::Buffer;
@@ -84,6 +88,9 @@ namespace protobuf_for_node {
   }
 
   Persistent<FunctionTemplate> SchemaTemplate;
+  Persistent<FunctionTemplate> ServiceSchemaTemplate;
+  Persistent<FunctionTemplate> ServiceTemplate;
+  Persistent<FunctionTemplate> MethodTemplate;
   Persistent<FunctionTemplate> TypeTemplate;
   Persistent<FunctionTemplate> ParseTemplate;
   Persistent<FunctionTemplate> SerializeTemplate;
@@ -262,11 +269,10 @@ namespace protobuf_for_node {
 	const Reflection* reflection = instance->GetReflection();
 	switch (field->cpp_type()) {
         case FieldDescriptor::CPPTYPE_MESSAGE:
-          type->ToProto(
-              repeated ?
-                  reflection->AddMessage(instance, field) :
-                  reflection->MutableMessage(instance, field),
-              As<Object>(value));
+          type->ToProto(repeated ?
+			reflection->AddMessage(instance, field) :
+			reflection->MutableMessage(instance, field),
+			As<Object>(value));
           break;
         case FieldDescriptor::CPPTYPE_STRING: {
           String::AsciiValue ascii(value);
@@ -337,7 +343,6 @@ namespace protobuf_for_node {
 	}
 
         Type* type = UnwrapThis<Type>(args);
-
 	Message* message = type->NewMessage();
 	type->ToProto(message, As<Object>(args[0]));
 	int length = message->ByteSize();
@@ -349,8 +354,7 @@ namespace protobuf_for_node {
       }
 
       static Handle<Value> ToString(const Arguments& args) {
-	return String::New(
-            UnwrapThis<Type>(args)->descriptor_->full_name().c_str());
+	return String::New(UnwrapThis<Type>(args)->descriptor_->full_name().c_str());
       }
     };
 
@@ -382,8 +386,8 @@ namespace protobuf_for_node {
 	schema->pool_->FindMessageTypeByName(*String::AsciiValue(name));
 
       return descriptor ?
-          schema->GetType(descriptor)->Constructor() :
-          Handle<Function>();
+	schema->GetType(descriptor)->Constructor() :
+	Handle<Function>();
     }
 
     static Handle<Value> NewSchema(const Arguments& args) {
@@ -408,28 +412,92 @@ namespace protobuf_for_node {
     }
   };
 
+ // services
+
+  class WrappedService : public ObjectWrap {
+  public:
+    static Handle<Value> Invoke(const Arguments& args) {
+      Service* service = UnwrapThis<WrappedService>(args)->service_;
+      MethodDescriptor* method = static_cast<MethodDescriptor*>(External::Unwrap(args[0]));
+      Schema* schema = ObjectWrap::Unwrap<Schema>(As<Object>(args.This()->GetInternalField(1)));
+
+      Message* request = service->GetRequestPrototype(method).New();
+      Message* response = service->GetResponsePrototype(method).New();
+      schema->GetType(method->input_type())->ToProto(request, As<Object>(args[1]));
+      service->CallMethod(method, NULL, request, response, NULL);
+      Handle<Object> result =  schema->GetType(method->output_type())->ToJs(*response);
+
+      delete response;
+      delete request;
+
+      return result;
+    }
+
+    WrappedService(Service* service) : service_(service) {
+      Wrap(ServiceTemplate->GetFunction()->NewInstance());
+
+      const ServiceDescriptor* descriptor = service->GetDescriptor();
+      Schema* schema = new Schema(ServiceSchemaTemplate->GetFunction()->NewInstance(),
+				  descriptor->file()->pool());
+      handle_->SetInternalField(1, schema->handle_);
+
+      Handle<Function> bind =
+	As<Function>(Script::Compile(String::New(
+            "(function(m) { var f = this; return function(arg) { return f.call(this, m, arg); }; })"))->Run());
+      for (int i = 0; i < descriptor->method_count(); i++) {
+	const MethodDescriptor* method = descriptor->method(i);
+	Handle<Value> arg = External::Wrap(const_cast<MethodDescriptor*>(method));
+	handle_->Set(String::New(method->name().c_str()),
+		     bind->Call(MethodTemplate->GetFunction(), 1, &arg));
+      }
+    }
+    
+    virtual ~WrappedService() {
+      delete service_;
+    }
+  private:
+    Service* service_;
+  };
+
+  void Export(Handle<Object> target, const char* name, Service* service) {
+    target->Set(String::New(name), (new WrappedService(service))->handle_);
+  }
+
   static void Init() {
-    protobuf_for_node::TypeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New());
-    protobuf_for_node::TypeTemplate->SetClassName(String::New("Type"));
+    TypeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New());
+    TypeTemplate->SetClassName(String::New("Type"));
     // native self
     // owning schema (so GC can manage our lifecyle)
     // constructor
     // toArray
-    protobuf_for_node::TypeTemplate->InstanceTemplate()->SetInternalFieldCount(4);
+    TypeTemplate->InstanceTemplate()->SetInternalFieldCount(4);
 
-    protobuf_for_node::SchemaTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::NewSchema));
-    protobuf_for_node::SchemaTemplate->SetClassName(String::New("Schema"));
+    SchemaTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::NewSchema));
+    SchemaTemplate->SetClassName(String::New("Schema"));
     // native self
     // array of types (so GC can manage our lifecyle)
-    protobuf_for_node::SchemaTemplate->InstanceTemplate()->SetInternalFieldCount(2);
-    protobuf_for_node::SchemaTemplate->InstanceTemplate()->SetNamedPropertyHandler(Schema::GetType);
+    SchemaTemplate->InstanceTemplate()->SetInternalFieldCount(2);
+    SchemaTemplate->InstanceTemplate()->SetNamedPropertyHandler(Schema::GetType);
 
-    protobuf_for_node::ParseTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Parse));
-    protobuf_for_node::SerializeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Serialize));
+    ServiceSchemaTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::NewSchema));
+    ServiceSchemaTemplate->SetClassName(String::New("Schema"));
+    // native self
+    // array of types (so GC can manage our lifecyle)
+    ServiceSchemaTemplate->InstanceTemplate()->SetInternalFieldCount(2);
+    ServiceSchemaTemplate->InstanceTemplate()->SetNamedPropertyHandler(Schema::GetType);
+
+    ServiceTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::NewSchema));
+    ServiceTemplate->SetClassName(String::New("Service"));
+    ServiceTemplate->InstanceTemplate()->SetInternalFieldCount(2);
+
+    MethodTemplate  = Persistent<FunctionTemplate>::New(FunctionTemplate::New(WrappedService::Invoke));
+
+    ParseTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Parse));
+    SerializeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Serialize));
   }
+
 }  // namespace protobuf_for_node
 
-// function templates 
 extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
   protobuf_for_node::Init();
 }
