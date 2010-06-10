@@ -82,11 +82,6 @@ namespace protobuf_for_node {
     return ObjectWrap::Unwrap<T>(args.This());
   }
 
-  template <typename T, typename U>
-  Handle<T> As(Handle<U> handle) {
-    return Handle<T>::Cast(handle);
-  }
-
   Persistent<FunctionTemplate> SchemaTemplate;
   Persistent<FunctionTemplate> ServiceSchemaTemplate;
   Persistent<FunctionTemplate> ServiceTemplate;
@@ -119,7 +114,7 @@ namespace protobuf_for_node {
       }
 
       Handle<Function> Constructor() const {
-        return As<Function>(handle_->GetInternalField(2));
+        return handle_->GetInternalField(2).As<Function>();
       }
 
       Local<Object> NewObject(Handle<Value> properties) const {
@@ -154,12 +149,12 @@ namespace protobuf_for_node {
         // managed type->schema link
 	self->SetInternalField(1, schema_->handle_);
 
-        Handle<Function> constructor = As<Function>(
-            Script::Compile(String::New(from.str().c_str()))->Run());
+        Handle<Function> constructor = 
+	  Script::Compile(String::New(from.str().c_str()))->Run().As<Function>();
         constructor->SetHiddenValue(String::New("type"), self);
 	
 	Handle<Function> bind =
-	  As<Function>(Script::Compile(String::New("(function(self) { var f = this; return function(arg) { return f.call(self, arg); }; })"))->Run());
+	  Script::Compile(String::New("(function(self) { var f = this; return function(arg) { return f.call(self, arg); }; })"))->Run().As<Function>();
 	Handle<Value> arg = self;
 	constructor->Set(String::New("parse"), bind->Call(ParseTemplate->GetFunction(), 1, &arg));
 	constructor->Set(String::New("serialize"), bind->Call(SerializeTemplate->GetFunction(), 1, &arg));
@@ -272,7 +267,7 @@ namespace protobuf_for_node {
           type->ToProto(repeated ?
 			reflection->AddMessage(instance, field) :
 			reflection->MutableMessage(instance, field),
-			As<Object>(value));
+			value.As<Object>());
           break;
         case FieldDescriptor::CPPTYPE_STRING: {
           String::AsciiValue ascii(value);
@@ -311,8 +306,8 @@ namespace protobuf_for_node {
 #undef SET
 
       void ToProto(Message* instance, Handle<Object> src) const {
-        Handle<Function> to_array = As<Function>(handle_->GetInternalField(3));
-	Handle<Array> properties = As<Array>(to_array->Call(src, 0, NULL));
+        Handle<Function> to_array = handle_->GetInternalField(3).As<Function>();
+	Handle<Array> properties = to_array->Call(src, 0, NULL).As<Array>();
 	for (int i = 0; i < descriptor_->field_count(); i++) {
 	  Handle<Value> value = properties->Get(i);
 	  if (value->IsUndefined()) continue;
@@ -325,7 +320,7 @@ namespace protobuf_for_node {
 	    if(!value->IsArray()) {
 	      ToProto(instance, field, value, child_type, true);
 	    } else {
-	      Handle<Array> array = As<Array>(value);
+	      Handle<Array> array = value.As<Array>();
 	      int length = array->Length();
 	      for (int j = 0; j < length; j++) {
 		ToProto(instance, field, array->Get(j), child_type, true);
@@ -344,7 +339,7 @@ namespace protobuf_for_node {
 
         Type* type = UnwrapThis<Type>(args);
 	Message* message = type->NewMessage();
-	type->ToProto(message, As<Object>(args[0]));
+	type->ToProto(message, args[0].As<Object>());
 	int length = message->ByteSize();
 	Buffer* buffer = Buffer::New(length);
 	message->SerializeWithCachedSizesToArray((google::protobuf::uint8*)buffer->data());
@@ -370,7 +365,7 @@ namespace protobuf_for_node {
 	new Type(this, descriptor, TypeTemplate->GetFunction()->NewInstance());
 
       // managed schema->[type] link
-      Handle<Array> types = As<Array>(handle_->GetInternalField(1));
+      Handle<Array> types = handle_->GetInternalField(1).As<Array>();
       types->Set(types->Length(), result->handle_);
       return result;
     }
@@ -419,11 +414,11 @@ namespace protobuf_for_node {
     static Handle<Value> Invoke(const Arguments& args) {
       Service* service = UnwrapThis<WrappedService>(args)->service_;
       MethodDescriptor* method = static_cast<MethodDescriptor*>(External::Unwrap(args[0]));
-      Schema* schema = ObjectWrap::Unwrap<Schema>(As<Object>(args.This()->GetInternalField(1)));
+      Schema* schema = ObjectWrap::Unwrap<Schema>(args.This()->GetInternalField(1).As<Object>());
 
       Message* request = service->GetRequestPrototype(method).New();
       Message* response = service->GetResponsePrototype(method).New();
-      schema->GetType(method->input_type())->ToProto(request, As<Object>(args[1]));
+      schema->GetType(method->input_type())->ToProto(request, args[1].As<Object>());
       service->CallMethod(method, NULL, request, response, NULL);
       Handle<Object> result =  schema->GetType(method->output_type())->ToJs(*response);
 
@@ -442,8 +437,8 @@ namespace protobuf_for_node {
       handle_->SetInternalField(1, schema->handle_);
 
       Handle<Function> bind =
-	As<Function>(Script::Compile(String::New(
-            "(function(m) { var f = this; return function(arg) { return f.call(this, m, arg); }; })"))->Run());
+	Script::Compile(String::New(
+            "(function(m) { var f = this; return function(arg) { return f.call(this, m, arg); }; })"))->Run().As<Function>();
       for (int i = 0; i < descriptor->method_count(); i++) {
 	const MethodDescriptor* method = descriptor->method(i);
 	Handle<Value> arg = External::Wrap(const_cast<MethodDescriptor*>(method));
@@ -503,6 +498,5 @@ extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
 }
 
 extern "C" void init(Handle<Object> target) {
-  target->Set(String::New("Schema"),
-	      protobuf_for_node::SchemaTemplate->GetFunction());
+  target->Set(String::New("Schema"), protobuf_for_node::SchemaTemplate->GetFunction());
 }
