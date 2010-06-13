@@ -21,5 +21,10 @@ namespace google {
 }
 
 namespace protobuf_for_node {
+  // Exports a JS object under "name" in "target" which forwards method calls to
+  // the given service implementation. Currently, the rpc controller and the "done"
+  // closure arguments will be passed as NULL. The service implementation must finish
+  // synchronously. This method takes ownership of the service argument and deletes it
+  // when the JS service proxy becomes unreachable.
   void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
 }
