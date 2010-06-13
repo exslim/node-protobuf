@@ -12,14 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <v8.h>
+package service;
 
-namespace google {
-  namespace protobuf {
-    class Service;
-  }
+message Request {
+  optional string msg = 1;
+}
+message Response {
+  optional int32 len = 1;
 }
 
-namespace protobuf_for_node {
-  void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
+service Service {
+  rpc Len(Request) returns (Response);
 }

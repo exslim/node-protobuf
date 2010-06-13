@@ -12,14 +12,20 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <v8.h>
+#include "../protobuf_for_node.h"
+#include "service.pb.h"
+#include "v8.h"
 
-namespace google {
-  namespace protobuf {
-    class Service;
-  }
-}
-
-namespace protobuf_for_node {
-  void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
+extern "C" void init(v8::Handle<v8::Object> target) {
+  // look ma - no v8 api
+  protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
+    virtual void Len(google::protobuf::RpcController* controller,
+		     const service::Request* request,
+		     service::Response* response,
+		     google::protobuf::Closure* done) {
+      response->set_len(request->msg().length());
+      // just to prove we're not blocking
+      sleep(1);
+    }
+  }));
 }

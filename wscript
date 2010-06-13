@@ -30,9 +30,13 @@ def configure(conf):
   conf.env.append_value("LIBPATH_PROTOBUF", "%s/lib"%(os.environ['PROTOBUF']))
   conf.env.append_value("LIB_PROTOBUF", "protobuf")
 
-
 def build(bld):
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
   obj.target = 'protobuf_for_node'
   obj.source = 'protobuf_for_node.cc'
   obj.uselib = 'PROTOBUF'
+
+  obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
+  obj.target = 'example/service'
+  obj.source = ['example/service.pb.cc', 'example/service.cc']
+  obj.uselib = ['PROTOBUF']

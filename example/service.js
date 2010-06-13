@@ -12,14 +12,16 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <v8.h>
+var puts = require('sys').puts;
+var pb = require('protobuf_for_node');
+var service_test = require('service_test');
 
-namespace google {
-  namespace protobuf {
-    class Service;
-  }
+var t = Date.now();
+var todo = 20;
+for (var i = 0; i < todo; i++) {
+    service_test.testService.Len({ msg: 'Hello World' }, function cb(response) {
+	(--todo) || puts("Async: " + (Date.now() - t));
+    });
 }
 
-namespace protobuf_for_node {
-  void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
-}
+puts(service_test.testService.Len({ msg: 'Hello World' }).len);

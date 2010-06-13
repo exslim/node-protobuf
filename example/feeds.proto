@@ -12,14 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <v8.h>
-
-namespace google {
-  namespace protobuf {
-    class Service;
+package feeds;
+message Feed {
+  optional string title = 1;
+  message Entry {
+    optional string title = 1;
   }
+  repeated Entry entry = 2;
 }
 
-namespace protobuf_for_node {
-  void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
-}
