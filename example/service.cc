@@ -22,10 +22,10 @@ extern "C" void init(v8::Handle<v8::Object> target) {
     virtual void Len(google::protobuf::RpcController*,
 		     const service::Request* request,
 		     service::Response* response,
-		     google::protobuf::Closure*) {
+		     google::protobuf::Closure* done) {
+      sleep(1);  // just to prove we're not blocking
       response->set_len(request->msg().length());
-      // just to prove we're not blocking
-      sleep(1);
+      done->Run();
     }
   }));
 }

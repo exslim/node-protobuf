@@ -14,14 +14,14 @@
 
 var puts = require('sys').puts;
 var pb = require('protobuf_for_node');
-var service_test = require('service_test');
+var service = require('example/service');
 
 var t = Date.now();
 var todo = 20;
 for (var i = 0; i < todo; i++) {
-    service_test.testService.Len({ msg: 'Hello World' }, function cb(response) {
-	(--todo) || puts("Async: " + (Date.now() - t));
+    service.service.Len({ msg: 'Hello World' }, function cb(response) {
+	(--todo) || puts("Executed 20 seconds of sleep in: " + (Date.now() - t) + " ms.");
     });
 }
 
-puts(service_test.testService.Len({ msg: 'Hello World' }).len);
+puts("Length of hello world: " + service.service.Len({ msg: 'Hello World' }).len);

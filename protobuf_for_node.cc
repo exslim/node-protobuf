@@ -427,7 +427,10 @@ namespace protobuf_for_node {
         AsyncInvocation::Start(self, method, request, response, output_type, args[2].As<Function>());
         return v8::Undefined();
       } else {
-        self->service_->CallMethod(method, NULL, request, response, NULL);
+        bool done;
+        self->service_->CallMethod(method, NULL, request, response, google::protobuf::NewCallback(&WrappedService::Done, &done));
+        CheckDone(done);
+
         Handle<Object> result = output_type->ToJs(*response);
 
         delete response;
@@ -462,6 +465,15 @@ namespace protobuf_for_node {
   private:
     Service* service_;
 
+    static void Done(bool* done) {
+      *done = true;
+    }
+
+    static void CheckDone(bool done) {
+      if (!done)
+        fprintf(stderr, "ERROR: Proto service returned without synchronously invoking 'done->Run()'\n");
+    }
+
     class AsyncInvocation {
     public:
       AsyncInvocation(WrappedService* service,
@@ -474,10 +486,11 @@ namespace protobuf_for_node {
                                              request_(request),
                                              response_(response),
                                              response_type_(response_type),
-                                             cb_(Persistent<Function>::New(cb)) {
+                                             cb_(Persistent<Function>::New(cb)),
+                                             done_(false)
+      {
         service_->Ref();  // includes ->schema->type
       }
-
 
       ~AsyncInvocation() {
         service_->Unref();
@@ -494,29 +507,36 @@ namespace protobuf_for_node {
                         Handle<Function> cb) {
         eio_custom(&AsyncInvocation::Run,
                    EIO_PRI_DEFAULT,
-                   &AsyncInvocation::Done,
+                   &AsyncInvocation::Finished,
                    static_cast<void*>(new AsyncInvocation(service, method, request, response, response_type, cb)));
         ev_ref(EV_DEFAULT_UC);
       }
 
       static int Run(eio_req* req) {
         AsyncInvocation* self = static_cast<AsyncInvocation*>(req->data);
-        self->service_->service_->CallMethod(self->method_, NULL, self->request_, self->response_, NULL);
-        req->result = 0;
+        self->service_->service_->CallMethod(self->method_,
+                                             NULL,
+                                             self->request_,
+                                             self->response_,
+                                             google::protobuf::NewCallback(&WrappedService::Done, &self->done_));
         return 0;
       }
 
-      static int Done(eio_req* req) {
-        ev_unref(EV_DEFAULT_UC);
-
+      static int Finished(eio_req* req) {
         AsyncInvocation* self = static_cast<AsyncInvocation*>(req->data);
+        CheckDone(self->done_);
+        InvokeCallback(self);
 
+        return 0;
+      }
+
+      static void InvokeCallback(AsyncInvocation* self) {
         HandleScope scope;
         Handle<Value> result = self->response_type_->ToJs(*(self->response_));
         self->cb_->Call(Context::GetCurrent()->Global(), 1, &result);
 
         delete self;
-        return 0;
+        ev_unref(EV_DEFAULT_UC);
       }
 
     private:
@@ -526,6 +546,7 @@ namespace protobuf_for_node {
       Message* response_;
       Schema::Type* response_type_;
       Persistent<Function> cb_;
+      bool done_;
     };
   };
 
