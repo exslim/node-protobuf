@@ -48,6 +48,74 @@ type. This means that you are able to attach methods:
   var aFeed = Feed.parse(Feed.serialize({ entry: [{}, {}] }));
   aFeed.numEntries()  =>  2
 
+Services
+
+Protocol buffers aren't only great for data interchange between
+processes - you can also use them to send data between code written in
+JS and C++ within the same process. Protobuf for node makes it simple
+to implement a native add-on without having to touch the V8 api at
+all. It's three easy steps:
+
+1. Define the add-on interface as a protobuf service:
+
+// The grand string length service.
+package service;
+
+message Request {
+  optional string msg = 1;
+}
+message Response {
+  optional int32 len = 1;
+}
+
+service Service {
+  rpc Len(Request) returns (Response);
+}
+
+... and generate the C++ code for it:
+
+proto/bin/protoc --cpp_out=. service.proto
+
+2. Implement and export the service in an add-on:
+
+#include "protobuf_for_node.h"
+#include "service.pb.h"
+#include "v8.h"
+
+extern "C" void init(v8::Handle<v8::Object> target) {
+  // look ma - no v8 api
+  protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
+    virtual void Len(google::protobuf::RpcController*,
+                     const service::Request* request,
+                     service::Response* response,
+                     google::protobuf::Closure*) {
+      response->set_len(request->msg().length());
+      // just to prove we're not blocking
+      sleep(1);
+    }
+  }));
+}
+
+3. Use it from JS:
+
+puts(require('service').service.Len({msg: 'Hello'}).len);
+
+If your service is CPU intensive, you should call it with an extra
+callback argument: the invocation is automatically placed on the eio
+thread pool and does not block node:
+
+require('service').service.Len({msg: 'Hello'}, function(response) {
+  puts(response.len);
+});
+
+Note that protobuf for node currently does not support asynchronous
+execution of the C++ service itself. It assumes that the service
+method executes synchronously and passes NULL for the rpc controller
+and the "done" closure.
+
+Also note that marshalling between JS and the request and response
+protos necessarily happens on the JS thread. Passing tons of data will
+not block less with asynchronous invocation.
 
 Speed
 

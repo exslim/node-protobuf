@@ -19,10 +19,10 @@
 extern "C" void init(v8::Handle<v8::Object> target) {
   // look ma - no v8 api
   protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
-    virtual void Len(google::protobuf::RpcController* controller,
+    virtual void Len(google::protobuf::RpcController*,
 		     const service::Request* request,
 		     service::Response* response,
-		     google::protobuf::Closure* done) {
+		     google::protobuf::Closure*) {
       response->set_len(request->msg().length());
       // just to prove we're not blocking
       sleep(1);
