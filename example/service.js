@@ -16,12 +16,10 @@ var puts = require('sys').puts;
 var pb = require('protobuf_for_node');
 var service = require('example/service');
 
-var t = Date.now();
-var todo = 20;
-for (var i = 0; i < todo; i++) {
-    service.service.Len({ msg: 'Hello World' }, function cb(response) {
-	(--todo) || puts("Executed 20 seconds of sleep in: " + (Date.now() - t) + " ms.");
-    });
-}
-
-puts("Length of hello world: " + service.service.Len({ msg: 'Hello World' }).len);
+service.service.Run({}, function cb(response) {
+  puts("Run done");
+});
+puts("Running");
+service.service.Finish({}, function cb(response) {
+  puts("Finish done");
+});

@@ -92,28 +92,16 @@ class Request : public ::google::protobuf::Message {
   
   // accessors -------------------------------------------------------
   
-  // optional string msg = 1;
-  inline bool has_msg() const;
-  inline void clear_msg();
-  static const int kMsgFieldNumber = 1;
-  inline const ::std::string& msg() const;
-  inline void set_msg(const ::std::string& value);
-  inline void set_msg(const char* value);
-  inline void set_msg(const char* value, size_t size);
-  inline ::std::string* mutable_msg();
-  
   // @@protoc_insertion_point(class_scope:service.Request)
  private:
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
   mutable int _cached_size_;
   
-  ::std::string* msg_;
-  static const ::std::string _default_msg_;
   friend void  protobuf_AddDesc_service_2eproto();
   friend void protobuf_AssignDesc_service_2eproto();
   friend void protobuf_ShutdownFile_service_2eproto();
   
-  ::google::protobuf::uint32 _has_bits_[(1 + 31) / 32];
+  ::google::protobuf::uint32 _has_bits_[1];
   
   // WHY DOES & HAVE LOWER PRECEDENCE THAN != !?
   inline bool _has_bit(int index) const {
@@ -185,24 +173,16 @@ class Response : public ::google::protobuf::Message {
   
   // accessors -------------------------------------------------------
   
-  // optional int32 len = 1;
-  inline bool has_len() const;
-  inline void clear_len();
-  static const int kLenFieldNumber = 1;
-  inline ::google::protobuf::int32 len() const;
-  inline void set_len(::google::protobuf::int32 value);
-  
   // @@protoc_insertion_point(class_scope:service.Response)
  private:
   ::google::protobuf::UnknownFieldSet _unknown_fields_;
   mutable int _cached_size_;
   
-  ::google::protobuf::int32 len_;
   friend void  protobuf_AddDesc_service_2eproto();
   friend void protobuf_AssignDesc_service_2eproto();
   friend void protobuf_ShutdownFile_service_2eproto();
   
-  ::google::protobuf::uint32 _has_bits_[(1 + 31) / 32];
+  ::google::protobuf::uint32 _has_bits_[1];
   
   // WHY DOES & HAVE LOWER PRECEDENCE THAN != !?
   inline bool _has_bit(int index) const {
@@ -233,7 +213,11 @@ class Service : public ::google::protobuf::Service {
   
   static const ::google::protobuf::ServiceDescriptor* descriptor();
   
-  virtual void Len(::google::protobuf::RpcController* controller,
+  virtual void Run(::google::protobuf::RpcController* controller,
+                       const ::service::Request* request,
+                       ::service::Response* response,
+                       ::google::protobuf::Closure* done);
+  virtual void Finish(::google::protobuf::RpcController* controller,
                        const ::service::Request* request,
                        ::service::Response* response,
                        ::google::protobuf::Closure* done);
@@ -266,7 +250,11 @@ class Service_Stub : public Service {
   
   // implements Service ------------------------------------------
   
-  void Len(::google::protobuf::RpcController* controller,
+  void Run(::google::protobuf::RpcController* controller,
+                       const ::service::Request* request,
+                       ::service::Response* response,
+                       ::google::protobuf::Closure* done);
+  void Finish(::google::protobuf::RpcController* controller,
                        const ::service::Request* request,
                        ::service::Response* response,
                        ::google::protobuf::Closure* done);
@@ -284,67 +272,9 @@ class Service_Stub : public Service {
 
 // Request
 
-// optional string msg = 1;
-inline bool Request::has_msg() const {
-  return _has_bit(0);
-}
-inline void Request::clear_msg() {
-  if (msg_ != &_default_msg_) {
-    msg_->clear();
-  }
-  _clear_bit(0);
-}
-inline const ::std::string& Request::msg() const {
-  return *msg_;
-}
-inline void Request::set_msg(const ::std::string& value) {
-  _set_bit(0);
-  if (msg_ == &_default_msg_) {
-    msg_ = new ::std::string;
-  }
-  msg_->assign(value);
-}
-inline void Request::set_msg(const char* value) {
-  _set_bit(0);
-  if (msg_ == &_default_msg_) {
-    msg_ = new ::std::string;
-  }
-  msg_->assign(value);
-}
-inline void Request::set_msg(const char* value, size_t size) {
-  _set_bit(0);
-  if (msg_ == &_default_msg_) {
-    msg_ = new ::std::string;
-  }
-  msg_->assign(reinterpret_cast<const char*>(value), size);
-}
-inline ::std::string* Request::mutable_msg() {
-  _set_bit(0);
-  if (msg_ == &_default_msg_) {
-    msg_ = new ::std::string;
-  }
-  return msg_;
-}
-
 // -------------------------------------------------------------------
 
 // Response
-
-// optional int32 len = 1;
-inline bool Response::has_len() const {
-  return _has_bit(0);
-}
-inline void Response::clear_len() {
-  len_ = 0;
-  _clear_bit(0);
-}
-inline ::google::protobuf::int32 Response::len() const {
-  return len_;
-}
-inline void Response::set_len(::google::protobuf::int32 value) {
-  _set_bit(0);
-  len_ = value;
-}
 
 
 // @@protoc_insertion_point(namespace_scope)

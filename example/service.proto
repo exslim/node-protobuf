@@ -15,12 +15,12 @@
 package service;
 
 message Request {
-  optional string msg = 1;
 }
 message Response {
-  optional int32 len = 1;
 }
 
 service Service {
-  rpc Len(Request) returns (Response);
+  rpc Run(Request) returns (Response);
+  rpc Finish(Request) returns (Response);
 }
+

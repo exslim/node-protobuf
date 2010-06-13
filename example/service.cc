@@ -19,12 +19,23 @@
 extern "C" void init(v8::Handle<v8::Object> target) {
   // look ma - no v8 api
   protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
-    virtual void Len(google::protobuf::RpcController*,
+    google::protobuf::Closure* delayed_;
+
+    virtual void Run(google::protobuf::RpcController*,
 		     const service::Request* request,
 		     service::Response* response,
 		     google::protobuf::Closure* done) {
-      sleep(1);  // just to prove we're not blocking
-      response->set_len(request->msg().length());
+      delayed_ = done;
+      // not calling done->Run()
+    }
+
+    // just simulating asynchronous termination of the Run() method
+    virtual void Finish(google::protobuf::RpcController*,
+			const service::Request* request,
+			service::Response* response,
+			google::protobuf::Closure* done) {
+      sleep(5);
+      delayed_->Run();
       done->Run();
     }
   }));

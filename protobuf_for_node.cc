@@ -155,7 +155,13 @@ namespace protobuf_for_node {
         constructor->SetHiddenValue(String::New("type"), self);
 
         Handle<Function> bind =
-          Script::Compile(String::New("(function(self) { var f = this; return function(arg) { return f.call(self, arg); }; })"))->Run().As<Function>();
+          Script::Compile(String::New(
+              "(function(self) {"
+              "  var f = this;"
+              "  return function(arg) {"
+              "    return f.call(self, arg);"
+              "  };"
+              "})"))->Run().As<Function>();
         Handle<Value> arg = self;
         constructor->Set(String::New("parse"), bind->Call(ParseTemplate->GetFunction(), 1, &arg));
         constructor->Set(String::New("serialize"), bind->Call(SerializeTemplate->GetFunction(), 1, &arg));
@@ -165,9 +171,9 @@ namespace protobuf_for_node {
         Wrap(self);
       }
 
-#define GET(TYPE)                                                \
-      (index >= 0 ?                                                \
-       reflection->GetRepeated##TYPE(instance, field, index) :        \
+#define GET(TYPE)                                                        \
+      (index >= 0 ?                                                      \
+       reflection->GetRepeated##TYPE(instance, field, index) :           \
        reflection->Get##TYPE(instance, field))
 
       static Handle<Value> ToJs(const Message& instance,
@@ -251,8 +257,8 @@ namespace protobuf_for_node {
         return result;
       }
 
-#define SET(TYPE, EXPR)                                                        \
-      if (repeated) reflection->Add##TYPE(instance, field, EXPR);        \
+#define SET(TYPE, EXPR)                                                 \
+      if (repeated) reflection->Add##TYPE(instance, field, EXPR);       \
       else reflection->Set##TYPE(instance, field, EXPR)
 
       static void ToProto(Message* instance,
@@ -428,8 +434,13 @@ namespace protobuf_for_node {
         return v8::Undefined();
       } else {
         bool done;
-        self->service_->CallMethod(method, NULL, request, response, google::protobuf::NewCallback(&WrappedService::Done, &done));
-        CheckDone(done);
+        self->service_->CallMethod(method,
+                                   NULL,
+                                   request,
+                                   response,
+                                   google::protobuf::NewCallback(&WrappedService::Done, &done));
+        if (!done)
+          fprintf(stderr, "ERROR: Synchronous proto service returned without synchronously invoking 'done->Run()'\n");
 
         Handle<Object> result = output_type->ToJs(*response);
 
@@ -450,7 +461,12 @@ namespace protobuf_for_node {
 
       Handle<Function> bind =
         Script::Compile(String::New(
-            "(function(m) { var f = this; return function(arg1, arg2) { return arg2 ? f.call(this, m, arg1, arg2) : f.call(this, m, arg1); }; })"))->Run().As<Function>();
+            "(function(m) {"
+            "  var f = this;"
+            "  return function(arg1, arg2) {"
+            "    return arg2 ? f.call(this, m, arg1, arg2) : f.call(this, m, arg1);"
+            "  };"
+            "})"))->Run().As<Function>();
       for (int i = 0; i < descriptor->method_count(); i++) {
         const MethodDescriptor* method = descriptor->method(i);
         Handle<Value> arg = External::Wrap(const_cast<MethodDescriptor*>(method));
@@ -462,6 +478,11 @@ namespace protobuf_for_node {
     virtual ~WrappedService() {
       delete service_;
     }
+
+    static void Init() {
+      AsyncInvocation::Init();
+    }
+
   private:
     Service* service_;
 
@@ -469,26 +490,39 @@ namespace protobuf_for_node {
       *done = true;
     }
 
-    static void CheckDone(bool done) {
-      if (!done)
-        fprintf(stderr, "ERROR: Proto service returned without synchronously invoking 'done->Run()'\n");
-    }
-
     class AsyncInvocation {
     public:
+      static void Init() {
+        ev_async_init(&ev_done, &InvokeAsyncCallbacks);
+      }
+
+      // main thread:
+      static void Start(WrappedService* service,
+                        MethodDescriptor* method,
+                        Message* request,
+                        Message* response,
+                        Schema::Type* response_type,
+                        Handle<Function> cb) {
+        eio_custom(&AsyncInvocation::Run,
+                   EIO_PRI_DEFAULT,
+                   &AsyncInvocation::Returned,
+                   static_cast<void*>(new AsyncInvocation(service, method, request, response, response_type, cb)));
+        ev_ref(EV_DEFAULT_UC);
+      }
+
+    private:
       AsyncInvocation(WrappedService* service,
                       MethodDescriptor* method,
                       Message* request,
                       Message* response,
                       Schema::Type* response_type,
                       Handle<Function> cb) : service_(service),
-                                             method_(method),
-                                             request_(request),
-                                             response_(response),
-                                             response_type_(response_type),
-                                             cb_(Persistent<Function>::New(cb)),
-                                             done_(false)
-      {
+                                               method_(method),
+                                               request_(request),
+                                               response_(response),
+                                               response_type_(response_type),
+                                               cb_(Persistent<Function>::New(cb)),
+                                               done_(false) {
         service_->Ref();  // includes ->schema->type
       }
 
@@ -499,42 +533,64 @@ namespace protobuf_for_node {
         delete response_;
       }
 
-      static void Start(WrappedService* service,
-                        MethodDescriptor* method,
-                        Message* request,
-                        Message* response,
-                        Schema::Type* response_type,
-                        Handle<Function> cb) {
-        eio_custom(&AsyncInvocation::Run,
-                   EIO_PRI_DEFAULT,
-                   &AsyncInvocation::Finished,
-                   static_cast<void*>(new AsyncInvocation(service, method, request, response, response_type, cb)));
-        ev_ref(EV_DEFAULT_UC);
-      }
+      static AsyncInvocation* head;
+      static ev_async ev_done;
 
+      // in some thread:
       static int Run(eio_req* req) {
         AsyncInvocation* self = static_cast<AsyncInvocation*>(req->data);
         self->service_->service_->CallMethod(self->method_,
                                              NULL,
                                              self->request_,
                                              self->response_,
-                                             google::protobuf::NewCallback(&WrappedService::Done, &self->done_));
+                                             google::protobuf::NewCallback(&Done, self));
         return 0;
       }
 
-      static int Finished(eio_req* req) {
-        AsyncInvocation* self = static_cast<AsyncInvocation*>(req->data);
-        CheckDone(self->done_);
-        InvokeCallback(self);
+      // in some thread:
+      static void Done(AsyncInvocation* self) {
+        self->done_ = true;
+        ev_async_send(EV_DEFAULT_UC_ &ev_done);
+      }
 
+      // main thread: service method returned
+      static int Returned(eio_req* req) {
+        AsyncInvocation* self = static_cast<AsyncInvocation*>(req->data);
+        if (self->done_) {
+          InvokeCallback(self);
+        } else {
+          // first delayed response?
+          if (!head) ev_async_start(EV_DEFAULT_UC_ &AsyncInvocation::ev_done);
+
+          // enqueue
+          self->next_ = head;
+          head = self;
+        }
+          
         return 0;
+      }
+
+      // main thread: service called Done() delayed
+      static void InvokeAsyncCallbacks(EV_P_ ev_async *, int) {
+        AsyncInvocation** pself = &head;
+        AsyncInvocation* self;
+        while ((self = *pself)) {
+          if (self->done_) {
+            *pself = self->next_;
+            InvokeCallback(self);
+          } else {
+            pself = &(self->next_);
+          }
+        }
+
+        // all outstanding callbacks delivered
+        if (!head) ev_async_stop(EV_DEFAULT_UC_ &ev_done);
       }
 
       static void InvokeCallback(AsyncInvocation* self) {
         HandleScope scope;
         Handle<Value> result = self->response_type_->ToJs(*(self->response_));
         self->cb_->Call(Context::GetCurrent()->Global(), 1, &result);
-
         delete self;
         ev_unref(EV_DEFAULT_UC);
       }
@@ -547,8 +603,11 @@ namespace protobuf_for_node {
       Schema::Type* response_type_;
       Persistent<Function> cb_;
       bool done_;
+      AsyncInvocation* next_;
     };
   };
+  WrappedService::AsyncInvocation* WrappedService::AsyncInvocation::head = NULL;
+  ev_async WrappedService::AsyncInvocation::ev_done;
 
   void ExportService(Handle<Object> target, const char* name, Service* service) {
     target->Set(String::New(name), (new WrappedService(service))->handle_);
@@ -585,14 +644,13 @@ namespace protobuf_for_node {
 
     ParseTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Parse));
     SerializeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New(Schema::Type::Serialize));
+
+    WrappedService::Init();
   }
 
 }  // namespace protobuf_for_node
 
-extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
-  protobuf_for_node::Init();
-}
-
 extern "C" void init(Handle<Object> target) {
+  protobuf_for_node::Init();
   target->Set(String::New("Schema"), protobuf_for_node::SchemaTemplate->GetFunction());
 }
