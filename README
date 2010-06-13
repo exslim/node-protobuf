@@ -88,10 +88,11 @@ extern "C" void init(v8::Handle<v8::Object> target) {
     virtual void Len(google::protobuf::RpcController*,
                      const service::Request* request,
                      service::Response* response,
-                     google::protobuf::Closure*) {
+                     google::protobuf::Closure* done) {
       response->set_len(request->msg().length());
       // just to prove we're not blocking
       sleep(1);
+      done->Run();
     }
   }));
 }
@@ -109,12 +110,12 @@ require('service').service.Len({msg: 'Hello'}, function(response) {
 });
 
 Note that protobuf for node currently does not support asynchronous
-execution of the C++ service itself. The service must executes
+execution of the C++ service itself. The service must execute
 synchronously and invoke the "done" closure.
 
 Also note that marshalling between JS and the request and response
-protos necessarily happens on the JS thread. Passing tons of data will
-not block less with asynchronous invocation.
+protos necessarily happens on the JS thread. Passing tons of data won't
+block any less using asynchronous invocation.
 
 Speed
 
