@@ -109,11 +109,9 @@ require('service').service.Len({msg: 'Hello'}, function(response) {
   puts(response.len);
 });
 
-Note that protobuf for node currently does not support asynchronous
-execution of the C++ service itself. The service must execute
-synchronously and invoke the "done" closure.
+Your service is free to finish and call the "done" closure asynchronously.
 
-Also note that marshalling between JS and the request and response
+Note that marshalling between JS and the request and response
 protos necessarily happens on the JS thread. Passing tons of data won't
 block any less using asynchronous invocation.
 
