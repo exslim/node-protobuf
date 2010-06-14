@@ -433,14 +433,14 @@ namespace protobuf_for_node {
         AsyncInvocation::Start(self, method, request, response, output_type, args[2].As<Function>());
         return v8::Undefined();
       } else {
-        bool done;
+        bool done = false;
         self->service_->CallMethod(method,
                                    NULL,
                                    request,
                                    response,
                                    google::protobuf::NewCallback(&WrappedService::Done, &done));
         if (!done)
-          fprintf(stderr, "ERROR: Synchronous proto service returned without synchronously invoking 'done->Run()'\n");
+          fprintf(stderr, "ERROR: Synchronous proto service invocation %s didn't invoke 'done->Run()'\n", method->full_name().c_str());
 
         Handle<Object> result = output_type->ToJs(*response);
 
@@ -650,7 +650,10 @@ namespace protobuf_for_node {
 
 }  // namespace protobuf_for_node
 
-extern "C" void init(Handle<Object> target) {
+extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
   protobuf_for_node::Init();
+}
+
+extern "C" void init(Handle<Object> target) {
   target->Set(String::New("Schema"), protobuf_for_node::SchemaTemplate->GetFunction());
 }
