@@ -13,6 +13,7 @@
 # permissions and limitations under the License.
 
 import os
+import Options
 
 srcdir = '.'
 blddir = 'build'
@@ -24,8 +25,10 @@ def set_options(opt):
 def configure(conf):
   conf.check_tool('compiler_cxx')
   conf.check_tool('node_addon')
+
   conf.env.append_value('CCFLAGS', ['-O3'])
   conf.env.append_value('CXXFLAGS', ['-O3'])
+  if Options.platform == 'darwin': conf.env.append_value('LINKFLAGS', ['-undefined', 'dynamic_lookup'])
   conf.env.append_value("CPPPATH_PROTOBUF", "%s/include"%(os.environ['PROTOBUF']))
   conf.env.append_value("LIBPATH_PROTOBUF", "%s/lib"%(os.environ['PROTOBUF']))
   conf.env.append_value("LIB_PROTOBUF", "protobuf")
