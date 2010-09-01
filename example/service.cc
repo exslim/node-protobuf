@@ -12,30 +12,29 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include <pwd.h>
+
 #include "../protobuf_for_node.h"
 #include "service.pb.h"
 #include "v8.h"
 
 extern "C" void init(v8::Handle<v8::Object> target) {
-  // look ma - no v8 api
-  protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
-    google::protobuf::Closure* delayed_;
-
-    virtual void Run(google::protobuf::RpcController*,
-		     const service::Request* request,
-		     service::Response* response,
-		     google::protobuf::Closure* done) {
-      delayed_ = done;
-      // not calling done->Run()
-    }
-
-    // just simulating asynchronous termination of the Run() method
-    virtual void Finish(google::protobuf::RpcController*,
-			const service::Request* request,
-			service::Response* response,
-			google::protobuf::Closure* done) {
-      sleep(5);
-      delayed_->Run();
+  // Look Ma - no v8 api!
+  protobuf_for_node::ExportService(target, "pwd", new (class : public pwd::Pwd {
+    virtual void GetEntries(google::protobuf::RpcController*,
+			    const pwd::EntriesRequest* request,
+			    pwd::EntriesResponse* response,
+			    google::protobuf::Closure* done) {
+      struct passwd* p;
+      while ((p = getpwent())) {
+	pwd::Entry* e = response->add_entry();
+	e->set_name(p->pw_name);
+	e->set_uid(p->pw_uid);
+	e->set_gid(p->pw_gid);
+	e->set_home(p->pw_dir);
+	e->set_shell(p->pw_shell);
+      }
+      setpwent();
       done->Run();
     }
   }));

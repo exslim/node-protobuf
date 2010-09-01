@@ -51,10 +51,10 @@ type. This means that you are able to attach methods:
 Services
 
 Protocol buffers aren't only great for data interchange between
-processes - you can also use them to send data between code written in
-JS and C++ within the same process. Protobuf for node makes it simple
-to implement a native add-on without having to touch the V8 api at
-all. It's three easy steps:
+processes - you can also use them to exchange structured data between
+JS and native code within the same process. Protobuf for node makes it
+simple to implement a native add-on without having to (dis)assemble
+objects through the V8 api at all. It's three easy steps:
 
 1. Define the add-on interface as a protobuf service:
 
@@ -127,14 +127,19 @@ faster than V8's native JSON support.
 
 Building and running
 
-You need to have node.js (>= 0.1.97) and protobuf (>= 2.3.0)
-installed. To build protobuf for node, do:
+You need to have node.js (known to work: 0.1.97 - 0.2) and protobuf
+(known to work: 2.3.0) installed. To build protobuf for node, do:
 
 PROTOBUF=<protobuf prefix> /path/to/node/bin/node-waf configure clean build
 
 This will build build/default/protobuf_for_node.node which needs to be
 installed in your NODE_PATH. The protobuf library is linked
 dynamically and needs to be in your LD_LIBRARY_PATH when running.
+
+Running the examples
+
+The examples should be run from within the protobuf-for-node directory, e.g.
+"node example/feeds.js".
 
 Limitations
 

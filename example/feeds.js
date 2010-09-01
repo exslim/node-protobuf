@@ -13,23 +13,37 @@
 // permissions and limitations under the License.
 
 var fs = require('fs');
-var pb = require('protobuf_for_node');
-var Schema = pb.Schema;
+var puts = require('sys').puts;
+
+// The "Schema" constructor lets you load a protocol schema definition
+// (a compiled .proto file).
+var Schema = require('protobuf_for_node').Schema;
+
+// "schema" contains all message types defined in feeds.proto|desc.
 var schema = new Schema(fs.readFileSync('example/feeds.desc'));
+// The "Feed" message.
 var Feed = schema['feeds.Feed'];
-schema = null;
+
+// Serializes a JS object to a protocol message in a node buffer
+// according to the protocol message schema.
 var serialized = Feed.serialize({ title: 'Title', ignored: 42 });
+
+// Parses a protocol message in a node buffer into a JS object
+// according to the protocol message schema.
 var aFeed = Feed.parse(serialized);  
 
-var puts = require('sys').puts;
-puts(JSON.stringify(aFeed, null, 2));
+// The "ignored" field has been dropped.
+puts("Message after roundtrip: " + JSON.stringify(aFeed, null, 2));
 
+// Each protocol message type has its own prototype. You can attach
+// methods to parsed protocol messages.
 Feed.prototype.numEntries = function() {
   return this.entry.length;
 };
 var aFeed = Feed.parse(Feed.serialize({ entry: [{}, {}] }));
-puts(aFeed.numEntries());
+puts("Number of entries: " + aFeed.numEntries());
 
+// Performance is (only) on par with builtin JSON serialization.
 var t = Date.now();
 for (var i = 0; i < 100000; i++)
   Feed.parse(Feed.serialize({ entry: [{}, {}] }));

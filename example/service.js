@@ -14,12 +14,19 @@
 
 var puts = require('sys').puts;
 var pb = require('protobuf_for_node');
-var service = require('example/service');
+var pwd = require('example/service');
 
-service.service.Run({}, function cb(response) {
-  puts("Run done");
+var entries = pwd.pwd.GetEntries({});
+puts(JSON.stringify(entries));
+
+// Alternatively, you can run callback-style. Such an invocation is
+// automatically placed on the eio thread pool. You need to do this
+// either a) if your service implementation is synchronous but CPU
+// intensive and would block node for too long OR b) if your service
+// implementation is asynchronous (calls done->Run() only after the
+// service method returns).
+pwd.pwd.GetEntries({}, function(entries) {
+    // This happens after the last line.
+    puts(JSON.stringify(entries));
 });
-puts("Running");
-service.service.Finish({}, function cb(response) {
-  puts("Finish done");
-});
+puts("Getting entries asynchronously ...");
