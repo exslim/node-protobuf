@@ -12,51 +12,26 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-#include <utility>
 #include <pwd.h>
 
 #include "../protobuf_for_node.h"
 #include "service.pb.h"
-#include "v8.h"
 
 // For demonstrational purposes, let's pretend that getpwent is
 // asynchronous, i.e. calls callbacks with data.  Besides returning
 // the password data, this demonstrates how to pass on call args as a
 // C-style "void* data".
 
-// Imaginary async system call.
+// Imaginary interface.
 void GetpwentAsync(
-    void (*cb)(struct passwd*, void*),
-    void (*done)(void*),
-    void* data) {
+    void (*cb)(struct passwd*, void*), // called for each entry
+    void (*done)(void*),               // called when done
+    void* data) {                      // auxiliary payload
+  // Pretend for a moment this wasn't synchronous.
   struct passwd* pwd;
   while (pwd = getpwent()) cb(pwd, data);
   setpwent();
   done(data);
-}
-
-typedef protobuf_for_node::ServiceCall<
-  const pwd::EntriesRequest, pwd::EntriesResponse> Call;
-
-void OnPasswd(struct passwd* pwd, void* data) {
-  // One lookup is done.
-  Call* call = Call::Cast(data);
-
-  // Otherwise, add to result.
-  pwd::Entry* e = call->response->add_entry();
-  e->set_name(pwd->pw_name);
-  e->set_uid(pwd->pw_uid);
-  e->set_gid(pwd->pw_gid);
-  e->set_home(pwd->pw_dir);
-  e->set_shell(pwd->pw_shell);
-}
-
-void OnDone(void* data) {
-  Call::Cast(data)->Done();
-}
-
-void GetEntries(Call* call) {
-  GetpwentAsync(OnPasswd, OnDone, call);
 }
 
 extern "C" void init(v8::Handle<v8::Object> target) {
@@ -64,11 +39,30 @@ extern "C" void init(v8::Handle<v8::Object> target) {
   protobuf_for_node::ExportService(
       target, "pwd",
       new (class : public pwd::Pwd {
+        // This is equivalent to the service call signature.
+        typedef protobuf_for_node::ServiceCall<
+          const pwd::EntriesRequest, pwd::EntriesResponse> Call;
+
+        static void OnPasswd(struct passwd* pwd, void* data) {
+          pwd::Entry* e = Call::Cast(data)->response->add_entry();
+          e->set_name(pwd->pw_name);
+          e->set_uid(pwd->pw_uid);
+          e->set_gid(pwd->pw_gid);
+          e->set_home(pwd->pw_dir);
+          e->set_shell(pwd->pw_shell);
+        }
+
+        static void OnDone(void* data) {
+          Call::Cast(data)->Done();
+        }
+
         virtual void GetEntries(google::protobuf::RpcController*,
                                 const pwd::EntriesRequest* request,
                                 pwd::EntriesResponse* response,
                                 google::protobuf::Closure* done) {
-          ::GetEntries(new Call(request, response, done));
+          GetpwentAsync(OnPasswd,
+                        OnDone,
+                        new Call(request, response, done));
         }
       }));
 }
