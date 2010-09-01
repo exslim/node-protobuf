@@ -12,30 +12,63 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
+#include <utility>
 #include <pwd.h>
 
 #include "../protobuf_for_node.h"
 #include "service.pb.h"
 #include "v8.h"
 
+// For demonstrational purposes, let's pretend that getpwent is
+// asynchronous, i.e. calls callbacks with data.  Besides returning
+// the password data, this demonstrates how to pass on call args as a
+// C-style "void* data".
+
+// Imaginary async system call.
+void GetpwentAsync(
+    void (*cb)(struct passwd*, void*),
+    void (*done)(void*),
+    void* data) {
+  struct passwd* pwd;
+  while (pwd = getpwent()) cb(pwd, data);
+  setpwent();
+  done(data);
+}
+
+typedef protobuf_for_node::ServiceCall<
+  const pwd::EntriesRequest, pwd::EntriesResponse> Call;
+
+void OnPasswd(struct passwd* pwd, void* data) {
+  // One lookup is done.
+  Call* call = Call::Cast(data);
+
+  // Otherwise, add to result.
+  pwd::Entry* e = call->response->add_entry();
+  e->set_name(pwd->pw_name);
+  e->set_uid(pwd->pw_uid);
+  e->set_gid(pwd->pw_gid);
+  e->set_home(pwd->pw_dir);
+  e->set_shell(pwd->pw_shell);
+}
+
+void OnDone(void* data) {
+  Call::Cast(data)->Done();
+}
+
+void GetEntries(Call* call) {
+  GetpwentAsync(OnPasswd, OnDone, call);
+}
+
 extern "C" void init(v8::Handle<v8::Object> target) {
   // Look Ma - no v8 api!
-  protobuf_for_node::ExportService(target, "pwd", new (class : public pwd::Pwd {
-    virtual void GetEntries(google::protobuf::RpcController*,
-			    const pwd::EntriesRequest* request,
-			    pwd::EntriesResponse* response,
-			    google::protobuf::Closure* done) {
-      struct passwd* p;
-      while ((p = getpwent())) {
-	pwd::Entry* e = response->add_entry();
-	e->set_name(p->pw_name);
-	e->set_uid(p->pw_uid);
-	e->set_gid(p->pw_gid);
-	e->set_home(p->pw_dir);
-	e->set_shell(p->pw_shell);
-      }
-      setpwent();
-      done->Run();
-    }
-  }));
+  protobuf_for_node::ExportService(
+      target, "pwd",
+      new (class : public pwd::Pwd {
+        virtual void GetEntries(google::protobuf::RpcController*,
+                                const pwd::EntriesRequest* request,
+                                pwd::EntriesResponse* response,
+                                google::protobuf::Closure* done) {
+          ::GetEntries(new Call(request, response, done));
+        }
+      }));
 }

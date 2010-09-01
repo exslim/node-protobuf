@@ -13,11 +13,13 @@
 // permissions and limitations under the License.
 
 var puts = require('sys').puts;
-var pb = require('protobuf_for_node');
 var pwd = require('example/service');
 
+// Synchronous service call. This is only possible if the service
+// implementation is synchronous, too, i.e. invokes the Done closure
+// before returning. Otherwise this will fail.
 var entries = pwd.pwd.GetEntries({});
-puts(JSON.stringify(entries));
+puts(entries.entry.length + " users");
 
 // Alternatively, you can run callback-style. Such an invocation is
 // automatically placed on the eio thread pool. You need to do this
@@ -26,7 +28,7 @@ puts(JSON.stringify(entries));
 // implementation is asynchronous (calls done->Run() only after the
 // service method returns).
 pwd.pwd.GetEntries({}, function(entries) {
-    // This happens after the last line.
-    puts(JSON.stringify(entries));
+    // This will print last.
+    puts(entries.entry.length + " users");
 });
 puts("Getting entries asynchronously ...");

@@ -566,7 +566,7 @@ namespace protobuf_for_node {
           self->next_ = head;
           head = self;
         }
-          
+
         return 0;
       }
 
@@ -609,11 +609,9 @@ namespace protobuf_for_node {
   WrappedService::AsyncInvocation* WrappedService::AsyncInvocation::head = NULL;
   ev_async WrappedService::AsyncInvocation::ev_done;
 
-  void ExportService(Handle<Object> target, const char* name, Service* service) {
-    target->Set(String::New(name), (new WrappedService(service))->handle_);
-  }
-
   static void Init() {
+    if (!TypeTemplate.IsEmpty()) return;
+
     TypeTemplate = Persistent<FunctionTemplate>::New(FunctionTemplate::New());
     TypeTemplate->SetClassName(String::New("Type"));
     // native self
@@ -648,12 +646,14 @@ namespace protobuf_for_node {
     WrappedService::Init();
   }
 
+  Local<Function> SchemaConstructor() {
+    Init();
+    return SchemaTemplate->GetFunction();
+  }
+
+  void ExportService(Handle<Object> target, const char* name, Service* service) {
+    Init();
+    target->Set(String::New(name), (new WrappedService(service))->handle_);
+  }
+
 }  // namespace protobuf_for_node
-
-extern "C" void __attribute__ ((constructor)) init_function_templates(void) {
-  protobuf_for_node::Init();
-}
-
-extern "C" void init(Handle<Object> target) {
-  target->Set(String::New("Schema"), protobuf_for_node::SchemaTemplate->GetFunction());
-}

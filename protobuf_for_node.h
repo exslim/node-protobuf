@@ -13,14 +13,12 @@
 // permissions and limitations under the License.
 
 #include <v8.h>
-
-namespace google {
-  namespace protobuf {
-    class Service;
-  }
-}
+#include <google/protobuf/service.h>
+#include <google/protobuf/stubs/common.h>
 
 namespace protobuf_for_node {
+  v8::Local<v8::Function> SchemaConstructor();
+
   // Exports a JS object under "name" in "target" which forwards method calls to
   // the given service implementation. Currently, the rpc controller
   // will be passed as NULL. Your service is free to finish and call the "done"
@@ -28,4 +26,30 @@ namespace protobuf_for_node {
   // This method takes ownership of the service argument and deletes it when the JS
   // service proxy becomes unreachable.
   void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
+
+  // When implementing asynchronous calls, you often need to pass
+  // request, response and done closure through C void* arguments.
+  // This class helps with that.
+  template <class Request, class Response>
+  struct ServiceCall {
+    const Request* const request;
+    Response* const response;
+    google::protobuf::Closure* const done;
+
+    ServiceCall(const Request* req,
+                Response* res,
+                google::protobuf::Closure* d)
+        : request(req), response(res), done(d) {}
+
+    // This self-destructs and runs "done".
+    void Done() {
+      google::protobuf::Closure* done = this->done;
+      delete this;
+      done->Run();
+    }
+
+    static ServiceCall<Request, Response>* Cast(void* data) {
+      return static_cast<ServiceCall<Request, Response>*>(data);
+    }
+  };
 }

@@ -31,12 +31,25 @@ def configure(conf):
   conf.env.append_value("LIB_PROTOBUF", "protobuf")
 
 def build(bld):
+  # protobuf_for_node comes as a library to link against for services
+  # and an addon to use for plain serialization.
+  obj = bld.new_task_gen('cxx', 'shlib')
+  obj.target = 'protobuf_for_node_lib'
+  obj.source = 'protobuf_for_node.cc'
+  obj.uselib = ['NODE', 'PROTOBUF']
+
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
   obj.target = 'protobuf_for_node'
-  obj.source = 'protobuf_for_node.cc'
-  obj.uselib = 'PROTOBUF'
+  obj.source = 'addon.cc'
+  obj.uselib = ['PROTOBUF']
+  obj.uselib_local = 'protobuf_for_node_lib'
 
+  # Example service. If you build your own add-on that exports a
+  # protobuf service, you will need to replace uselib_local with
+  # uselib and point CPPPATH, LIBPATH and LIB to where you've
+  # installed protobuf_for_node.
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
   obj.target = 'example/service'
   obj.source = ['example/service.pb.cc', 'example/service.cc']
   obj.uselib = ['PROTOBUF']
+  obj.uselib_local = 'protobuf_for_node_lib'
