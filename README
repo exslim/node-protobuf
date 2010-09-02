@@ -1,4 +1,12 @@
-Protobuf for Node adds idiomatic protocol buffer handling to node.JS.
+Protobuf for Node adds idiomatic protocol buffer handling to
+node.JS.
+
+It is actually two things in one: firstly, you can marshall protocol
+messages to and from Node byte buffers and send them over the
+wire. Secondly, you can use protocol messages as a native interface
+from JS to C++ in the same process. It takes away the details of the
+V8 and the eio threadpool APIs and makes native extensions to Node
+much easier to implement.
 
 How to use
 
@@ -58,18 +66,26 @@ objects through the V8 api at all. It's three easy steps:
 
 1. Define the add-on interface as a protobuf service:
 
-// The grand string length service.
-package service;
+// An example service to query pwd(3).
+package pwd;
 
-message Request {
-  optional string msg = 1;
-}
-message Response {
-  optional int32 len = 1;
+// Empty (=no arg) request message.
+message EntriesRequest {
 }
 
-service Service {
-  rpc Len(Request) returns (Response);
+message Entry {
+  optional string name = 1;
+  optional int32 uid = 2;
+  optional int32 gid = 3;
+  optional string home = 4;
+  optional string shell = 5;
+}
+message EntriesResponse {
+  repeated Entry entry = 1;
+}
+
+service Pwd {
+  rpc GetEntries(EntriesRequest) returns (EntriesResponse);
 }
 
 ... and generate the C++ code for it:
@@ -78,52 +94,64 @@ proto/bin/protoc --cpp_out=. service.proto
 
 2. Implement and export the service in an add-on:
 
-#include "protobuf_for_node.h"
-#include "service.pb.h"
-#include "v8.h"
-
 extern "C" void init(v8::Handle<v8::Object> target) {
-  // look ma - no v8 api
-  protobuf_for_node::ExportService(target, "service", new (class : public service::Service {
-    virtual void Len(google::protobuf::RpcController*,
-                     const service::Request* request,
-                     service::Response* response,
-                     google::protobuf::Closure* done) {
-      response->set_len(request->msg().length());
-      // just to prove we're not blocking
-      sleep(1);
-      done->Run();
-    }
-  }));
-}
+  // Look Ma - no V8 api required!
+
+  // Simple synchronous implementation.
+  protobuf_for_node::ExportService(
+      target, "pwd",
+      new (class : public pwd::Pwd {
+        virtual void GetEntries(google::protobuf::RpcController*,
+                                const pwd::EntriesRequest* request,
+                                pwd::EntriesResponse* response,
+                                google::protobuf::Closure* done) {
+	  struct passwd* pwd;
+	  while ((pwd = getpwent())) {
+            pwd::Entry* e = response->add_entry();
+            e->set_name(pwd->pw_name);
+            e->set_uid(pwd->pw_uid);
+            e->set_gid(pwd->pw_gid);
+            e->set_home(pwd->pw_dir);
+            e->set_shell(pwd->pw_shell);
+          }
+	  setpwent();
+	  done->Run();
+        }
+      }));
 
 3. Use it from JS:
 
-puts(require('service').service.Len({msg: 'Hello'}).len);
+// prints the user database
+puts(JSON.stringify(require('pwd').pwd.GetEntries({}), null, 2));
 
 If your service is CPU intensive, you should call it with an extra
 callback argument: the invocation is automatically placed on the eio
 thread pool and does not block node:
 
-require('service').service.Len({msg: 'Hello'}, function(response) {
-  puts(response.len);
+// prints the user database
+require('pwd').pwd.GetEntries({}, function(response) {
+  puts(JSON.stringify(response), null, 2);
 });
 
 Your service is free to finish and call the "done" closure asynchronously.
 
-Note that marshalling between JS and the request and response
-protos necessarily happens on the JS thread. Passing tons of data won't
-block any less using asynchronous invocation.
+Note that marshalling between JS and the request and response protos
+necessarily happens on the JS thread. Passing tons of data will block
+just as much using asynchronous invocation.
 
 Speed
 
-Protobuf for Node relies on the protobuf C++ runtime but it does not
-require any generation, compilation or linkage of generated C++
-code. It works reflectively and is thus able to deal with arbitrary
-schemas. This means however, that it is not as fast as with generated
-code. Simple measurements show that it's about between 20% and 50%
-faster than V8's native JSON support.
+The Protobuf for Node add-on relies on the protobuf C++ runtime but it
+does not require any generation, compilation or linkage of generated
+C++ code. It works reflectively and is thus able to deal with
+arbitrary schemas. This means however, that it is not as fast as with
+generated code. Simple measurements show that [un]marshalling is about
+between 20% and 50% faster than V8's native JSON support.
 
+Calling C++ services is faster since it avoids marshalling to bytes
+but transfers data directly between the JS objects and the protocol
+messages. Also, in this case you compile the generated service
+interface into your code, so reflection is faster.
 
 Building and running
 
@@ -132,9 +160,13 @@ You need to have node.js (known to work: 0.1.97 - 0.2) and protobuf
 
 PROTOBUF=<protobuf prefix> /path/to/node/bin/node-waf configure clean build
 
-This will build build/default/protobuf_for_node.node which needs to be
-installed in your NODE_PATH. The protobuf library is linked
-dynamically and needs to be in your LD_LIBRARY_PATH when running.
+This will build
+a) the protobuf_for_node *library* (build/default/libprotobuf_for_node_lib.so).
+It is linked to by your service-exporting add-ons and by the
+b) protobuf_for_node *add-on* (build/default/protobuf_for_node.node).
+
+You need a) and the protobuf library in your [DY]LD_LIBRARY_PATH and
+b) in your NODE_PATH if you require('protobuf_for_node').
 
 Running the examples
 
