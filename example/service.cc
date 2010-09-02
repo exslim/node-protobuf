@@ -17,7 +17,17 @@
 #include "../protobuf_for_node.h"
 #include "service.pb.h"
 
-// For demonstrational purposes, let's pretend that getpwent is
+// Copy a struct passwd into a response message.
+void AddEntry(pwd::EntriesResponse* response, struct passwd* pwd) {
+  pwd::Entry* e = response->add_entry();
+  e->set_name(pwd->pw_name);
+  e->set_uid(pwd->pw_uid);
+  e->set_gid(pwd->pw_gid);
+  e->set_home(pwd->pw_dir);
+  e->set_shell(pwd->pw_shell);
+}
+
+// Now, for demonstrational purposes, let's pretend that getpwent is
 // asynchronous, i.e. calls callbacks with data.  Besides returning
 // the password data, this demonstrates how to pass on call args as a
 // C-style "void* data".
@@ -34,26 +44,39 @@ void GetpwentAsync(
   done(data);
 }
 
+
 extern "C" void init(v8::Handle<v8::Object> target) {
-  // Look Ma - no v8 api!
+  // Look Ma - no V8 api required!
+
+  // Simple synchronous implementation.
   protobuf_for_node::ExportService(
-      target, "pwd",
+      target, "sync",
+      new (class : public pwd::Pwd {
+        virtual void GetEntries(google::protobuf::RpcController*,
+                                const pwd::EntriesRequest* request,
+                                pwd::EntriesResponse* response,
+                                google::protobuf::Closure* done) {
+	  struct passwd* pwd;
+	  while ((pwd = getpwent())) AddEntry(response, pwd);
+	  setpwent();
+	  done->Run();
+        }
+      }));
+
+  // Asynchronous implementation.
+  protobuf_for_node::ExportService(
+      target, "async",
       new (class : public pwd::Pwd {
         // This is equivalent to the service call signature.
         typedef protobuf_for_node::ServiceCall<
           const pwd::EntriesRequest, pwd::EntriesResponse> Call;
 
         static void OnPasswd(struct passwd* pwd, void* data) {
-          pwd::Entry* e = Call::Cast(data)->response->add_entry();
-          e->set_name(pwd->pw_name);
-          e->set_uid(pwd->pw_uid);
-          e->set_gid(pwd->pw_gid);
-          e->set_home(pwd->pw_dir);
-          e->set_shell(pwd->pw_shell);
+	  AddEntry(Call::Cast(data)->response, pwd);
         }
 
         static void OnDone(void* data) {
-          Call::Cast(data)->Done();
+          delete Call::Cast(data);  // call complete - invokes done callback
         }
 
         virtual void GetEntries(google::protobuf::RpcController*,

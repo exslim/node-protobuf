@@ -27,9 +27,23 @@ namespace protobuf_for_node {
   // service proxy becomes unreachable.
   void ExportService(v8::Handle<v8::Object> target, const char* name, google::protobuf::Service* service);
 
-  // When implementing asynchronous calls, you often need to pass
-  // request, response and done closure through C void* arguments.
-  // This class helps with that.
+  // When implementing services using async apis, you often need to
+  // pass [request,] response and done closure through a C void*
+  // user_data argument.
+  // This class helps with that. It's a simple holder, plus: once you
+  // delete the object, the done closure is fired.
+  //
+  // Usage pattern:
+  //   typedef ServiceCall<XRequest, XResponse> XCall;
+  //   void Service(rpc, request, response, done) {
+  //     some_async_api(args, WhenDone,
+  //                    (void*)new XCall(request, response, done));
+  //   }
+  //   void WhenDone(result, void *user_data) {
+  //     XCall* call = XCall::Cast(user_data);
+  //     call->response->set_xxx(result)
+  //     delete call;  // triggers done->Run()
+  //   }
   template <class Request, class Response>
   struct ServiceCall {
     const Request* const request;
@@ -41,15 +55,12 @@ namespace protobuf_for_node {
                 google::protobuf::Closure* d)
         : request(req), response(res), done(d) {}
 
-    // This self-destructs and runs "done".
-    void Done() {
-      google::protobuf::Closure* done = this->done;
-      delete this;
+    ~ServiceCall() {
       done->Run();
     }
 
-    static ServiceCall<Request, Response>* Cast(void* data) {
-      return static_cast<ServiceCall<Request, Response>*>(data);
+    static ServiceCall<Request, Response>* Cast(void* user_data) {
+      return static_cast<ServiceCall<Request, Response>*>(user_data);
     }
   };
 }

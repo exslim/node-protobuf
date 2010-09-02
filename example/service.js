@@ -18,17 +18,22 @@ var pwd = require('example/service');
 // Synchronous service call. This is only possible if the service
 // implementation is synchronous, too, i.e. invokes the Done closure
 // before returning. Otherwise this will fail.
-var entries = pwd.pwd.GetEntries({});
+var entries = pwd.sync.GetEntries({});
 puts(entries.entry.length + " users");
 
-// Alternatively, you can run callback-style. Such an invocation is
-// automatically placed on the eio thread pool. You need to do this
-// either a) if your service implementation is synchronous but CPU
-// intensive and would block node for too long OR b) if your service
-// implementation is asynchronous (calls done->Run() only after the
-// service method returns).
-pwd.pwd.GetEntries({}, function(entries) {
+// Synchronous implementations can be called callback style, too.
+// They will automatically be placed on the eio thred pool. This is
+// good for blocking or CPU-consuming tasks.
+pwd.sync.GetEntries({}, function(entries) {
     // This will print last.
-    puts(entries.entry.length + " users");
+    puts("sync: " + entries.entry.length + " users");
 });
-puts("Getting entries asynchronously ...");
+puts("Getting entries asynchronously from sync service ...");
+
+// Invocations of async services (ones that call "Done" only after the
+// initial service call returns) must be called callback-style.
+pwd.async.GetEntries({}, function(entries) {
+    // This will print last.
+    puts("async: " + entries.entry.length + " users");
+});
+puts("Getting entries asynchronously from async service ...");
