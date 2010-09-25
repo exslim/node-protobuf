@@ -13,7 +13,7 @@
 // permissions and limitations under the License.
 
 var puts = require('sys').puts;
-var pwd = require('example/service');
+var pwd = require('protoservice');
 
 // Synchronous service call. This is only possible if the service
 // implementation is synchronous, too, i.e. invokes the Done closure

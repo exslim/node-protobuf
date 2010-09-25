@@ -15,7 +15,7 @@
 #include <pwd.h>
 
 #include "../protobuf_for_node.h"
-#include "service.pb.h"
+#include "protoservice.pb.h"
 
 // Copy a struct passwd into a response message.
 void AddEntry(pwd::EntriesResponse* response, struct passwd* pwd) {

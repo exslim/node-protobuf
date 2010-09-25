@@ -52,7 +52,7 @@ def build(bld):
   # uselib and point CPPPATH, LIBPATH and LIB to where you've
   # installed protobuf_for_node.
   obj = bld.new_task_gen('cxx', 'shlib', 'node_addon')
-  obj.target = 'example/service'
-  obj.source = ['example/service.pb.cc', 'example/service.cc']
+  obj.target = 'protoservice'
+  obj.source = ['example/protoservice.pb.cc', 'example/protoservice.cc']
   obj.uselib = ['PROTOBUF']
   obj.uselib_local = 'protobuf_for_node_lib'
