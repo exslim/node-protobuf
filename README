@@ -155,15 +155,17 @@ interface into your code, so reflection is faster.
 
 Building and running
 
-You need to have node.js (known to work: 0.1.97 - 0.2) and protobuf
+You need to have node.js (known to work: 0.1.97 - 0.2.2) and protobuf
 (known to work: 2.3.0) installed. To build protobuf for node, do:
 
-PROTOBUF=<protobuf prefix> /path/to/node/bin/node-waf configure clean build
+PROTOBUF=<protobuf prefix> /path/to/node/bin/node-waf configure clean build install
 
 This will build
 a) the protobuf_for_node *library* (build/default/libprotobuf_for_node_lib.so).
 It is linked to by your service-exporting add-ons and by the
 b) protobuf_for_node *add-on* (build/default/protobuf_for_node.node).
+
+'install' will install them in ~/.node_libraries where node searches for both add-ons 
 
 You need a) and the protobuf library in your [DY]LD_LIBRARY_PATH and
 b) in your NODE_PATH if you require('protobuf_for_node').

@@ -250,10 +250,13 @@ namespace protobuf_for_node {
         Buffer* buf = ObjectWrap::Unwrap<Buffer>(args[0]->ToObject());
 
         Message* message = type->NewMessage();
-        message->ParseFromArray(buf->data(), buf->length());
-        Handle<Object> result = type->ToJs(*message);
-        delete message;
+	bool success = 
+	  message->ParseFromArray(buf->data(), buf->length());
+	Handle<Value> result = success
+	  ? Handle<Value>(type->ToJs(*message))
+      	  : v8::ThrowException(String::New("Malformed message"));
 
+	delete message;
         return result;
       }
 
