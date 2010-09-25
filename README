@@ -165,10 +165,8 @@ a) the protobuf_for_node *library* (build/default/libprotobuf_for_node_lib.so).
 It is linked to by your service-exporting add-ons and by the
 b) protobuf_for_node *add-on* (build/default/protobuf_for_node.node).
 
-'install' will install them in ~/.node_libraries where node searches for both add-ons 
-
 You need a) and the protobuf library in your [DY]LD_LIBRARY_PATH and
-b) in your NODE_PATH if you require('protobuf_for_node').
+b) in your NODE_PATH if you require('protobuf_for_node'). 'install' may or may not do the right thing.
 
 Running the examples
 
