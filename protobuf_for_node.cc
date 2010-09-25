@@ -73,6 +73,10 @@ using v8::Value;
 using v8::V8;
 
 namespace protobuf_for_node {
+  const char E_NO_ARRAY[] = "Not an array";
+  const char E_NO_OBJECT[] = "Not an object";
+  const char E_UNKNOWN_ENUM[] = "Unknown enum value";
+
   template <typename T>
   static T* UnwrapThis(const Arguments& args) {
     return ObjectWrap::Unwrap<T>(args.This());
@@ -250,14 +254,14 @@ namespace protobuf_for_node {
         Buffer* buf = ObjectWrap::Unwrap<Buffer>(args[0]->ToObject());
 
         Message* message = type->NewMessage();
-	bool success = 
-	  message->ParseFromArray(buf->data(), buf->length());
-	Handle<Value> result = success
-	  ? Handle<Value>(type->ToJs(*message))
-      	  : v8::ThrowException(
+        bool success = 
+          message->ParseFromArray(buf->data(), buf->length());
+        Handle<Value> result = success
+          ? Handle<Value>(type->ToJs(*message))
+                : v8::ThrowException(
               v8::Exception::Error(String::New("Malformed message")));
 
-	delete message;
+        delete message;
         return result;
       }
 
@@ -265,16 +269,19 @@ namespace protobuf_for_node {
       if (repeated) reflection->Add##TYPE(instance, field, EXPR);       \
       else reflection->Set##TYPE(instance, field, EXPR)
 
-      static void ToProto(Message* instance,
-                          const FieldDescriptor* field,
-                          Handle<Value> value,
-                          const Type* type,
-                          bool repeated) {
+      static const char* ToProto(Message* instance,
+                                 const FieldDescriptor* field,
+                                 Handle<Value> value,
+                                 const Type* type,
+                                 bool repeated) {
         HandleScope scope;
 
         const Reflection* reflection = instance->GetReflection();
         switch (field->cpp_type()) {
         case FieldDescriptor::CPPTYPE_MESSAGE:
+          if (!value->IsObject()) {
+            return E_NO_OBJECT;
+          }
           type->ToProto(repeated ?
                         reflection->AddMessage(instance, field) :
                         reflection->MutableMessage(instance, field),
@@ -286,10 +293,10 @@ namespace protobuf_for_node {
           break;
         }
         case FieldDescriptor::CPPTYPE_INT32:
-          SET(Int32, value->NumberValue());
+          SET(Int32, value->Int32Value());
           break;
         case FieldDescriptor::CPPTYPE_UINT32:
-          SET(UInt32, value->NumberValue());
+          SET(UInt32, value->Uint32Value());
           break;
         case FieldDescriptor::CPPTYPE_INT64:
           SET(Int64, value->NumberValue());
@@ -307,21 +314,30 @@ namespace protobuf_for_node {
           SET(Bool, value->BooleanValue());
           break;
         case FieldDescriptor::CPPTYPE_ENUM:
-          SET(Enum,
-              value->IsNumber() ?
-              field->enum_type()->FindValueByNumber(value->Int32Value()) :
-              field->enum_type()->FindValueByName(*String::AsciiValue(value)));
+          const google::protobuf::EnumValueDescriptor* enum_value =
+            value->IsNumber() ?
+            field->enum_type()->FindValueByNumber(value->Int32Value()) :
+            field->enum_type()->FindValueByName(*String::AsciiValue(value));
+          if (!enum_value) {
+            return E_UNKNOWN_ENUM;
+          }
+          SET(Enum, enum_value);
           break;
         }
+
+        return NULL;
       }
 #undef SET
 
-      void ToProto(Message* instance, Handle<Object> src) const {
+      const char* ToProto(Message* instance, Handle<Object> src) const {
         Handle<Function> to_array = handle_->GetInternalField(3).As<Function>();
         Handle<Array> properties = to_array->Call(src, 0, NULL).As<Array>();
-        for (int i = 0; i < descriptor_->field_count(); i++) {
+
+        const char* error = NULL;
+        for (int i = 0; !error && i < descriptor_->field_count(); i++) {
           Handle<Value> value = properties->Get(i);
-          if (value->IsUndefined()) continue;
+          if (value->IsUndefined() ||
+              value->IsNull()) continue;
 
           const FieldDescriptor* field = descriptor_->field(i);
           const Type* child_type =
@@ -329,35 +345,43 @@ namespace protobuf_for_node {
             schema_->GetType(field->message_type()) : NULL;
           if (field->is_repeated()) {
             if(!value->IsArray()) {
-              ToProto(instance, field, value, child_type, true);
-            } else {
-              Handle<Array> array = value.As<Array>();
-              int length = array->Length();
-              for (int j = 0; j < length; j++) {
-                ToProto(instance, field, array->Get(j), child_type, true);
-              }
+              error = E_NO_ARRAY;
+              continue;
+            } 
+
+            Handle<Array> array = value.As<Array>();
+            int length = array->Length();
+
+            for (int j = 0; !error && j < length; j++) {
+              error = ToProto(instance, field, array->Get(j), child_type, true);
             }
           } else {
-            ToProto(instance, field, value, child_type, false);
+            error = ToProto(instance, field, value, child_type, false);
           }
         }
+        return error;
       }
 
       static Handle<Value> Serialize(const Arguments& args) {
         if (!args[0]->IsObject()) {
           return v8::ThrowException(
-	      v8::Exception::TypeError(v8::String::New("Not an object")));
+              v8::Exception::TypeError(v8::String::New("Not an object")));
         }
 
         Type* type = UnwrapThis<Type>(args);
         Message* message = type->NewMessage();
-        type->ToProto(message, args[0].As<Object>());
-        int length = message->ByteSize();
-        Buffer* buffer = Buffer::New(length);
-        message->SerializeWithCachedSizesToArray((google::protobuf::uint8*)buffer->data());
+        const char* error = type->ToProto(message, args[0].As<Object>());
+        Buffer* result;
+        if (!error) {
+          result = Buffer::New(message->ByteSize());
+          message->SerializeWithCachedSizesToArray(
+              (google::protobuf::uint8*)result->data());
+        }
         delete message;
 
-        return buffer->handle_;
+        return error
+          ? v8::ThrowException(v8::Exception::Error(String::New(error)))
+          : result->handle_;
       }
 
       static Handle<Value> ToString(const Arguments& args) {
