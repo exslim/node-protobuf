@@ -14,12 +14,8 @@ assert.equal(T.serialize(message).inspect(), golden.inspect(), "roundtrip");
 message.ignored = 42;
 assert.equal(T.serialize(message).inspect(), golden.inspect(), "ignored field");
 
-var parsed = false;
-try {
+assert.throws(function() {
   T.parse(new Buffer('invalid'));
-  parsed = true;
-} catch(e) {
-}
-assert.ok(!parsed, "Should not parse");
+}, Error, "Should not parse");
 
 puts("Success");

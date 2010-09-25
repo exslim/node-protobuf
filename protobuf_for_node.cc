@@ -254,7 +254,8 @@ namespace protobuf_for_node {
 	  message->ParseFromArray(buf->data(), buf->length());
 	Handle<Value> result = success
 	  ? Handle<Value>(type->ToJs(*message))
-      	  : v8::ThrowException(String::New("Malformed message"));
+      	  : v8::ThrowException(
+              v8::Exception::Error(String::New("Malformed message")));
 
 	delete message;
         return result;
@@ -344,7 +345,8 @@ namespace protobuf_for_node {
 
       static Handle<Value> Serialize(const Arguments& args) {
         if (!args[0]->IsObject()) {
-          return v8::ThrowException(args[0]);
+          return v8::ThrowException(
+	      v8::Exception::TypeError(v8::String::New("Not an object")));
         }
 
         Type* type = UnwrapThis<Type>(args);
@@ -405,7 +407,8 @@ namespace protobuf_for_node {
 
       FileDescriptorSet descriptors;
       if (!descriptors.ParseFromArray(buf->data(), buf->length())) {
-        return v8::ThrowException(String::New("Malformed descriptor"));
+        return v8::ThrowException(
+            v8::Exception::Error(String::New("Malformed descriptor")));
       }
 
       DescriptorPool* pool = new DescriptorPool;
