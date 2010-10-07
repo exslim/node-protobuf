@@ -1,4 +1,4 @@
-// Copyright 2010 Google Inc.
+c// Copyright 2010 Google Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you
 // may not use this file except in compliance with the License.
@@ -141,11 +141,11 @@ namespace protobuf_for_node {
           from <<
             "var x = arr[" << i << "]; "
             "if(x !== undefined) this['" <<
-            descriptor->field(i)->camelcase_name() <<
+            descriptor->field(i)->name() <<
             "'] = x; ";
 
           if (i > 0) to << ", ";
-          to << "this['" << descriptor->field(i)->camelcase_name() << "']";
+          to << "this['" << descriptor->field(i)->name() << "']";
         }
 
         from << " }})";
