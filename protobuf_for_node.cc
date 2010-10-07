@@ -1,4 +1,4 @@
-c// Copyright 2010 Google Inc.
+// Copyright 2010 Google Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License"); you
 // may not use this file except in compliance with the License.
@@ -687,3 +687,7 @@ namespace protobuf_for_node {
   }
 
 }  // namespace protobuf_for_node
+
+extern "C" void init(v8::Handle<v8::Object> target) {
+  target->Set(v8::String::New("Schema"), protobuf_for_node::SchemaConstructor());
+}
